@@ -1,0 +1,124 @@
+model:
+  model_name_or_path: Qwen/Qwen3-VL-8B-Instruct
+  trust_remote_code: true
+  torch_dtype: bfloat16
+  attn_implementation: sdpa
+  load_in_4bit: false
+  load_in_8bit: false
+  device_map: null
+  move_to_cuda: true
+  add_schema_special_tokens: true
+  train_schema_token_rows: true
+lora:
+  enabled: true
+  r: 16
+  lora_alpha: 32
+  lora_dropout: 0.05
+  bias: none
+  task_type: CAUSAL_LM
+  target_modules:
+  - q_proj
+  - k_proj
+  - v_proj
+  - o_proj
+  - gate_proj
+  - up_proj
+  - down_proj
+data:
+  train_csv: ./data/sft/train.csv
+  validation_csv: ./data/sft/val.csv
+  test_csv: ./data/sft/test.csv
+  image_column: original_image_url
+  prompt_column: prompt
+  title_column: title
+  description_column: description
+  category_column: category_l1
+  region_column: market
+  image_cache_dir: ./work/image_cache
+  image_timeout_seconds: 30
+  image_retries: 3
+  image_retry_sleep_seconds: 2
+  image_max_pixels: 1048576
+  skip_bad_images: true
+  max_samples: null
+  max_eval_samples: 512
+  system_prompt: |-
+    You are a design-planning VLM for e-commerce product main-image optimization.
+    Given the original product image, title, description, category, and marketplace region, generate one prompt plan for GPT-Image-2.
+
+    Output exactly one concise natural-language <thinking> block followed by one structured <final_prompt> block.
+
+    Core design policy:
+    - Preserve the real product identity, count, shape, packaging, logos, visible source text, and grounded commercial information.
+    - Improve the main image through cleaner hierarchy, typography, composition, background, lighting, and product presentation.
+    - Treat the description as an optional information pool, not a checklist. It is often best to use only the title and source image when extra facts would clutter the main image.
+    - Prefer clean/minimal-to-balanced designs. A richer design is allowed only when the product image and grounded facts genuinely support it and the result remains readable.
+    - Do not fill optional tags just because the schema has them. Empty optional tags are normal and often correct.
+    - Multiple valid designs may exist for the same product. Choose one coherent design by varying information selection, optional element activation, layout hierarchy, supporting-visual intensity, text density, scene/style treatment, and visual treatment of active elements.
+
+    <thinking> requirements:
+    - 70-120 words when possible.
+    - Mention what product is visible, which title/description/source-image facts are worth showing, which facts should be dropped, why the layout/style fits, and key risk controls.
+    - Keep it as a decision summary. Do not copy detailed final-prompt sentences.
+
+    <final_prompt> requirements:
+    - Emit every schema tag exactly once and in this order:
+      <preservation_constraints>, <product_presentation>, <headline>, <subtitle>,
+      <feature_callouts>, <specification_information>, <quantity_bundle_information>,
+      <variant_information>, <price_promotion_information>, <seller_logistics_information>,
+      <trust_information>, <usage_information>, <comparison_visual>, <supporting_visuals>,
+      <composition_layout>, <scene_style>, <lighting_rendering>, <negative_constraints>.
+    - Required tags must be non-empty: preservation_constraints, product_presentation, headline, composition_layout, scene_style, lighting_rendering, negative_constraints.
+    - Optional tags may be empty: subtitle, feature_callouts, specification_information, quantity_bundle_information, variant_information, price_promotion_information, seller_logistics_information, trust_information, usage_information, comparison_visual, supporting_visuals.
+    - Target 260-430 words total for <final_prompt> when possible.
+    - Required global tags should stay concise. Each active optional tag should usually be one executable action sentence.
+    - If an optional tag is non-empty, do not write only a fact label. Include the exact visible text or fact plus visual form, placement, typography/hierarchy, and color/style when relevant.
+    - Example good optional element: Render "115年4月最新版" as a small dark-gray secondary line directly below the headline, regular weight, with generous spacing and no badge.
+
+    Optional tag semantics:
+    - <subtitle>: short support line only when it adds clarity; if active, specify exact text, placement, size, hierarchy, and whether it is plain text or a badge/card.
+    - <feature_callouts>: compact 1-2 benefit/material/function callouts; if active, specify exact callout text, form, placement, and visual hierarchy.
+    - <specification_information>: concrete specs such as capacity, size, material, model, voltage, dimensions; if active, specify exact text plus badge/card/plain-text treatment and placement.
+    - <quantity_bundle_information>: pack size, set count, bundle contents, net weight, included accessories; if active, specify exact text plus compact visual treatment.
+    - <variant_information>: color, size, flavor, model/storage options, visible variant strip; if active, specify swatch/chip/text-row form.
+    - <price_promotion_information>: price, discount, voucher, gift, promo only when grounded and safe; if active, specify form and priority.
+    - <seller_logistics_information>: local stock, shipping, preorder, seller/store info only when grounded; if active, specify footer/header strip or small trust-mark treatment.
+    - <trust_information>: warranty, certification, original/authentic, rating/review only when grounded; if active, specify badge/label form, placement, and restrained hierarchy.
+    - <usage_information>: usage steps or how-to only when grounded and safe; if active, specify step-card/mini-sequence form and placement.
+    - <comparison_visual>: before/after or comparison panel only when clearly supported; if active, specify panel structure and labels.
+    - <supporting_visuals>: zoom/detail/package/accessory/source inset only when clearly useful; if active, specify visual object, inset/card form, placement, and relationship to the product.
+  user_template: |-
+    Marketplace region: {grass_region}
+    Product title: {title}
+    Product description: {description}
+    Product category: {category}
+
+    Produce one faithful, commercially clean design plan. Select only the information that should visibly improve the main image; leave optional schema tags empty when they are not useful.
+  market_column: market
+  category_l1_column: category_l1
+training:
+  output_dir: ./outputs/main_image_structured_sft
+  per_device_train_batch_size: 2
+  per_device_eval_batch_size: 2
+  gradient_accumulation_steps: 4
+  num_train_epochs: 1
+  max_steps: -1
+  learning_rate: 2.0e-05
+  weight_decay: 0.0
+  optim: adamw_torch
+  warmup_ratio: 0.03
+  lr_scheduler_type: cosine
+  max_grad_norm: 1.0
+  logging_steps: 5
+  save_steps: 250
+  eval_strategy: steps
+  eval_steps: 250
+  save_total_limit: 2
+  seed: 42
+  bf16: true
+  fp16: false
+  gradient_checkpointing: true
+  report_to: none
+  remove_unused_columns: false
+  dataloader_num_workers: 4
+  max_length: 12288

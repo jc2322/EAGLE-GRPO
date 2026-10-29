@@ -1,0 +1,25 @@
+seed: 42
+device: cpu
+output_dir: ./outputs/weight_head
+unknown_context: error
+data:
+  pretrain: ./data/weight_head/original_optimized_train.jsonl
+  pretrain_validation: ./data/weight_head/original_optimized_val.jsonl
+  finetune: ./data/weight_head/optimized_optimized_train.jsonl
+  finetune_validation: ./data/weight_head/optimized_optimized_val.jsonl
+pretrain:
+  steps: 500
+  learning_rate: 0.003
+  global_l2: 0.01
+  residual_l2: 0.1
+  max_grad_norm: 5.0
+  validation_every: 10
+  patience: 80
+finetune:
+  steps: 300
+  learning_rate: 0.0005
+  global_l2: 0.01
+  residual_l2: 0.1
+  max_grad_norm: 5.0
+  validation_every: 10
+  patience: 80
